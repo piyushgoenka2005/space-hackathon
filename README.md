@@ -1,6 +1,6 @@
 # Team MindMatrix - Autonomous Constellation Manager (ACM)
 
-National Space Hackathon 2026 submission by Team MindMatrix.
+National Space Hackathon 2026 submission - Team MindMatrix.
 
 This repository implements an end-to-end autonomous constellation operations stack:
 - High-frequency orbital telemetry ingestion
