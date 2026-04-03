@@ -1299,27 +1299,78 @@ function renderBullseye(data){
         ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(cx+Math.cos(rad)*maxR,cy+Math.sin(rad)*maxR);ctx.stroke();
     }
 
-    // Plot CDMs
+    // Plot CDMs with numbered markers and side legend for clean readability.
     const cdms=data?.active_cdms||[];
     const nowTs=data?.timestamp?Date.parse(data.timestamp):Date.now();
-    cdms.forEach((cdm,i)=>{
+    const bySeverity=[...cdms].sort((a,b)=>{
+        const ad=(a.miss_distance_km||a.distance_km||9999), bd=(b.miss_distance_km||b.distance_km||9999);
+        const ap=(a.collision_probability||0), bp=(b.collision_probability||0);
+        return (bp*1e6 + (1/Math.max(bd,0.001))) - (ap*1e6 + (1/Math.max(ad,0.001)));
+    });
+    const rows=[];
+    const rowCap=ui>1?6:4;
+
+    function fmtTca(sec){
+        if(sec < 60) return '<1m';
+        if(sec < 3600) return `${Math.round(sec/60)}m`;
+        return `${(sec/3600).toFixed(1)}h`;
+    }
+
+    bySeverity.forEach((cdm,i)=>{
         const dist=cdm.miss_distance_km||cdm.distance_km||5;
         const pc=cdm.collision_probability||0;
         const tcaMs=cdm.tca?Date.parse(cdm.tca):NaN;
         const tcaSec=isNaN(tcaMs)?maxT:Math.max(0,(tcaMs-nowTs)/1000);
-        // Use relative_velocity direction as angle; fallback to golden angle
         const angle=cdm.approach_angle_deg?cdm.approach_angle_deg*DEG:(i*137.5)*DEG;
         const r2=t2r(clamp(tcaSec,minT,maxT));
         const px=cx+Math.cos(angle)*r2,py=cy+Math.sin(angle)*r2;
         const col=(pc>1e-4||dist<0.1)?'#ff3344':(pc>1e-6||dist<1)?'#ffaa00':dist<5?'#886600':'#00ff88';
+        const dotR=clamp(3+pc*40,3,ui>1?10:8);
+
         ctx.fillStyle=col;
-        ctx.beginPath();ctx.arc(px,py,clamp(3+pc*40,3,ui>1?10:8),0,Math.PI*2);ctx.fill();
-        // Label with distance + Pc
-        setCanvasFont(ctx,7.5,ui,'monospace','bold');ctx.fillStyle=col;ctx.textAlign='center';
-        const pcStr=pc>0?` Pc=${pc.toExponential(1)}`:'';
-        const tStr=`${Math.max(0,Math.round(tcaSec/60))}m`;
-        ctx.fillText(`${tStr} | ${dist.toFixed(2)}km${pcStr}`,px,py-(ui>1?14:7));
+        ctx.beginPath();ctx.arc(px,py,dotR,0,Math.PI*2);ctx.fill();
+        ctx.strokeStyle='rgba(255,255,255,0.7)';ctx.lineWidth=0.7;
+        ctx.stroke();
+
+        const idx=i+1;
+        ctx.fillStyle='rgba(255,255,255,0.95)';
+        setCanvasFont(ctx,8,ui,'monospace','bold');
+        ctx.textAlign='center';
+        ctx.fillText(String(idx),px,py-(ui>1?10:8));
+
+        if(i<rowCap){
+            const risk=(pc>1e-4||dist<0.1)?'CRIT':(pc>1e-6||dist<1)?'WARN':'CAUT';
+            rows.push({idx,col,dist,tca:fmtTca(tcaSec),risk,pc});
+        }
     });
+
+    if(rows.length>0){
+        const panelX=12;
+        const panelY=12;
+        const rowH=ui>1?15:12;
+        const panelW=ui>1?320:250;
+        const panelH=26 + rows.length*rowH + 8;
+        ctx.fillStyle='rgba(4,12,22,0.82)';
+        ctx.fillRect(panelX,panelY,panelW,panelH);
+        ctx.strokeStyle='rgba(0,212,255,0.35)';ctx.lineWidth=0.9;
+        ctx.strokeRect(panelX,panelY,panelW,panelH);
+
+        setCanvasFont(ctx,8.5,ui,'sans-serif','bold');
+        ctx.fillStyle='rgba(150,230,255,0.92)';ctx.textAlign='left';
+        ctx.fillText('ACTIVE CLOSE APPROACHES',panelX+8,panelY+12);
+        setCanvasFont(ctx,7.3,ui,'monospace','bold');
+        ctx.fillStyle='rgba(130,205,230,0.75)';
+        ctx.fillText('#  MISS    TCA   RISK   Pc',panelX+8,panelY+22);
+
+        rows.forEach((r,ri)=>{
+            const y=panelY+36+ri*rowH;
+            const pcTxt=r.pc>=1e-6?r.pc.toExponential(1):'-';
+            ctx.fillStyle=r.col;
+            ctx.fillRect(panelX+8,y-6,7,7);
+            ctx.fillStyle='rgba(230,245,255,0.92)';
+            ctx.fillText(`${String(r.idx).padEnd(2,' ')} ${r.dist.toFixed(2).padStart(5,' ')}km ${r.tca.padStart(4,' ')} ${r.risk.padStart(5,' ')} ${pcTxt}`,panelX+20,y);
+        });
+    }
 
     // Center label
     setCanvasFont(ctx,9.5,ui,'sans-serif');ctx.fillStyle='var(--tx2)';ctx.textAlign='center';

@@ -1,94 +1,104 @@
-# Team Kamal - Video Demonstration Script (Under 5 Minutes)
+# Team MindMatrix - Video Demonstration Script (3-4 Minutes)
 
-Use this as a direct speaking script. Follow the timestamp, action, and exact lines.
+Use this exact script while recording. Focus is live website demo first, documentation second.
 
 ## Total Duration Target
 
-- 4 minutes 30 seconds to 4 minutes 50 seconds
+- 3 minutes 20 seconds to 3 minutes 50 seconds
 
-## 00:00 - 00:20 | Opening
-
-Action:
-- Show project title slide or repository homepage.
-
-Say exactly:
-- Hello judges, we are Team Kamal.
-- This is our Autonomous Constellation Manager for real-time debris avoidance and constellation operations.
-- We will demonstrate the architecture, core algorithms, APIs, and live dashboard behavior.
-
-## 00:20 - 01:00 | Problem + Approach
+## 00:00 - 00:25 | Opening + Problem Statement (Short)
 
 Action:
-- Show README architecture section or system diagram.
+- Show dashboard already running at http://127.0.0.1:8000/
 
 Say exactly:
-- Our goal is to keep satellites safe in a dense debris environment while minimizing fuel and maintaining uptime.
-- The system has five layers: frontend dashboard, FastAPI services, simulation engine, physics modules, and data ingestion.
-- The control loop is: propagate, screen conjunctions, score risk, schedule maneuver, and refresh telemetry.
+- The problem is space is getting crowded with active satellites and debris, so collision risk is increasing and manual handling does not scale.
+- We track satellites and space debris, predict possible collisions, and automatically plan safe movements while saving fuel.
 
-## 01:00 - 01:45 | Numerical Methods (with equations)
+## 00:25 - 01:10 | Live Data + Fleet View
 
 Action:
-- Show README math equations or Team_Kamal_Final_Report.tex equations section.
+- Point to Fleet Overview counters.
+- Point to Satellite List and Debris count.
 
 Say exactly:
-- We model each object in ECI state as position and velocity.
-- Dynamics use two-body gravity with J2 perturbation.
-- Time propagation uses fixed-step RK4 for stable integration.
-- Initial states are seeded using SGP4 from TLE catalogs.
-- This gives us a practical balance between physical fidelity and runtime performance.
+- This is our live Orbital Insight dashboard.
+- Here we can see active satellites, debris objects, fuel and uptime metrics, and maneuver outcomes.
+- The system continuously updates state and keeps mission operators aware of constellation health in real time.
 
-## 01:45 - 02:25 | Spatial Optimization + Risk
+## 01:10 - 01:55 | Satellite-Focused Demonstration
 
 Action:
-- Show conjunction module mention in README and then dashboard alerts panel.
+- Click one satellite from the Satellite List.
+- Keep selection visible for a few seconds.
+- Highlight that selected orbit/related data gets focus in views and panels.
 
 Say exactly:
-- For conjunction screening, we use a KD-tree broad phase instead of brute-force all-pairs checks.
-- This reduces computational load significantly for large debris sets.
-- For collision likelihood, we use a Chan-style probability approximation based on miss distance and uncertainty.
-- Risk events are then prioritized for autonomous planning.
+- Now I select a specific satellite to shift from fleet-level monitoring to object-level operations.
+- Once selected, the dashboard focuses on that satellite’s trajectory and mission context.
+- This is important for rapid decision-making when an operator needs object-specific awareness.
 
-## 02:25 - 03:10 | Maneuver Logic + Constraints
+## 01:55 - 02:35 | Controls + Time Evolution (Proof of Simulation)
 
 Action:
-- Show maneuver section in README and then live metrics/controls in dashboard.
+- Click +1 MIN, then +1 HR.![alt text](image.png)
+- Turn AUTO on for a few seconds, then STOP.
+- Optionally click +1 DAY once.
 
 Say exactly:
-- Maneuver planning is constrained by per-burn delta-v limits, cooldown windows, and remaining fuel.
-- Fuel depletion is computed using the Tsiolkovsky equation.
-- The planner balances risk reduction against fuel use and service disruption.
-- We support evasion, recovery, station-keeping, and operational scheduling via API.
+- These controls advance simulation time and trigger backend propagation.
+- AUTO mode continuously runs the simulation while keeping UI control responsive.
+- Long steps are handled safely, so the system avoids overlapping calls and remains stable during operations.
 
-## 03:10 - 04:00 | Live UI Demonstration
+## 02:35 - 03:00 | Globe + Ground Track + Radar Panels
 
 Action:
-- Open dashboard at http://127.0.0.1:8000/
-- Press +1 MIN, +1 HR, and AUTO for a few seconds.
-- Show map view and globe view.
+- Switch between 3D GLOBE and GROUND TRACK.
+- Point at Proximity Radar, Maneuver Log, and charts.
 
 Say exactly:
-- Here is the live Orbital Insight dashboard.
-- We have manual time controls and auto mode for continuous simulation.
-- We hardened controls to avoid overlapping step requests and to keep the UI responsive during larger jumps.
-- The globe and Mercator map provide orbit context, trajectories, and conjunction visibility for operations.
+- We provide both 3D and map views for spatial awareness.
+- The radar and alert panels support conjunction interpretation.
+- In alerts, WARNING is mainly driven by close miss distance, so near passes are highlighted early.
+- Collision probability shown as Pc is the statistical risk estimate; even very small Pc means low true impact likelihood despite a close pass.
+- Maneuver and analytics panels show operational impact, including delta-v and avoided-risk trends.
 
-## 04:00 - 04:30 | API Compliance + Close
+## 03:00 - 03:15 | Very Short Architecture Reference
 
 Action:
-- Show terminal or docs with endpoints list.
+- Briefly show architecture section from README (5-8 seconds only).
 
 Say exactly:
-- We implemented all required endpoints: telemetry ingestion, maneuver scheduling, and simulation stepping.
-- We also provide visualization snapshots and health endpoints for monitoring.
-- Docker packaging and port 8000 compliance are included for evaluation.
-- Thank you. This is Team Kamal.
+- Architecture is API layer, simulation engine, physics modules, and data ingestion feeding this live dashboard.
+
+## 03:15 - 03:35 | Full Workflow (Say Exactly)
+
+Say exactly:
+- 🔁 11. Full Workflow (SUPER IMPORTANT)
+- This is your BEST explanation:
+- Get satellite data
+- Predict positions
+- Find nearby objects
+- Calculate risk
+- Plan maneuver
+- Apply movement
+- Repeat
+- I will say this confidently because this is the core autonomous loop of our system.
+
+## 03:35 - 03:50 | Strengths + Ending (Say Exactly)
+
+Say exactly:
+- 🧠 12. What makes our project strong?
+- Real-time tracking ✅
+- Scalable (KD-tree) ✅
+- Physically accurate (J2, RK4) ✅
+- Practical constraints (fuel, cooldown) ✅
+- Automation + control ✅
 
 ---
 
-## Delivery Tips
+## Quick Delivery Tips
 
-- Speak clearly and slightly slower than normal.
-- Keep cursor movement intentional and minimal.
-- If a live call is slow, narrate what is expected and continue.
-- Keep this exact sequence to stay under five minutes.
+- Keep mouse movement slow and intentional.
+- Do not over-explain equations during the demo; show behavior first.
+- If no active conjunction appears at that second, say that fast-forward reveals events over time.

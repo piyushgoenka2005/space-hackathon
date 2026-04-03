@@ -45,6 +45,7 @@ CONJUNCTION_LOOKAHEAD_HOURS = 24.0
 RISK_GRID_DEG = 10
 RISK_FIELD_INTERVAL_S = 300
 AUTONOMY_MAX_DEBRIS = int(os.getenv("AOSE_AUTONOMY_MAX_DEBRIS", "0"))
+DEMO_CONJUNCTION = os.getenv("AOSE_DEMO_CONJUNCTION", "1") == "1"
 LASER_ENGAGE_MAX_DIST_KM = 1.5
 LASER_MIN_TCA_S = 120.0
 LASER_MAX_REL_SPEED_KMS = 18.0
@@ -109,12 +110,64 @@ class SimulationEngine:
         self._snapshot_cache_time: Optional[datetime] = None
 
         self._init_from_tle_catalogs()
+        self._inject_demo_conjunction_state()
         self._record_metrics()
         self._record_trails()
 
         logger.info(
             f"ACM Engine initialized | {len(self.satellites)} sats | "
             f"{len(self.debris)} debris | T={self.current_time.isoformat()}"
+        )
+
+    def _inject_demo_conjunction_state(self):
+        """Inject one deterministic close approach so demo alerts are always visible."""
+        if not DEMO_CONJUNCTION or not self.satellites:
+            return
+
+        sid = sorted(self.satellites.keys())[0]
+        sat = self.satellites[sid]
+        did = "DEMO-DEB-0001"
+
+        r = sat.state[:3]
+        v = sat.state[3:]
+        r_norm = np.linalg.norm(r)
+        if r_norm < 1e-9:
+            return
+
+        radial = r / r_norm
+        # 45 m miss distance keeps event in CRITICAL bucket (<100 m).
+        miss_km = 0.045
+        deb_pos = r + radial * miss_km
+
+        # Keep a small relative velocity so the pair stays close long enough for demos.
+        v_norm = np.linalg.norm(v)
+        if v_norm < 1e-12:
+            vel_offset = np.array([0.0, 0.0003, 0.0])
+        else:
+            tangential = v / v_norm
+            vel_offset = tangential * 0.0003
+        deb_vel = v + vel_offset
+
+        self.debris[did] = np.concatenate([deb_pos, deb_vel])
+
+        evt = ConjunctionEvent(
+            sat_id=sid,
+            debris_id=did,
+            tca=self.current_time + timedelta(minutes=12),
+            miss_distance=miss_km,
+            sat_pos=r.copy(),
+            deb_pos=deb_pos.copy(),
+            relative_velocity=(v - deb_vel),
+        )
+        self.conjunction_assessor.active_cdms = [evt]
+        self._invalidate_snapshot_cache()
+
+        logger.info(
+            "Injected demo conjunction | sat=%s debris=%s miss=%.3fkm tca=%s",
+            sid,
+            did,
+            miss_km,
+            evt.tca.isoformat(),
         )
 
     def _invalidate_snapshot_cache(self):

@@ -9,6 +9,7 @@
 \usepackage{siunitx}
 \usepackage{hyperref}
 \usepackage{xcolor}
+\usepackage{graphicx}
 \usepackage{tikz}
 \usetikzlibrary{arrows.meta,positioning,shapes.geometric,fit}
 
@@ -16,20 +17,20 @@
   colorlinks=true,
   linkcolor=blue,
   urlcolor=blue,
-  pdftitle={Team Kamal - Final Technical Report},
-  pdfauthor={Team Kamal}
+  pdftitle={Team MindMatrix - Final Technical Report},
+  pdfauthor={Team MindMatrix}
 }
 
-\title{\textbf{Team Kamal Final Technical Report}\\
+\title{\textbf{Team MindMatrix Final Technical Report}\\
 \large Autonomous Constellation Manager for Space Debris Risk Mitigation}
-\author{Team Kamal}
+\author{Team MindMatrix}
 \date{April 2026}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-This report presents the final submission architecture and methods implemented by Team Kamal for autonomous conjunction monitoring and maneuver planning in low Earth orbit operations. The solution integrates physically grounded orbital propagation, efficient spatial screening, constrained maneuver optimization, and an interactive operations dashboard. We provide equations for the numerical methods, algorithmic details for risk detection and optimization, and system-level design diagrams for end-to-end execution.
+This report presents the final submission architecture and methods implemented by Team MindMatrix for autonomous conjunction monitoring and maneuver planning in low Earth orbit operations. The solution integrates physically grounded orbital propagation, efficient spatial screening, constrained maneuver optimization, and an interactive operations dashboard. We provide equations for the numerical methods, algorithmic details for risk detection and optimization, and system-level design diagrams for end-to-end execution.
 \end{abstract}
 
 \section{Problem and Objectives}
@@ -132,14 +133,15 @@ m_{\mathrm{fuel}}-\Delta m &\ge 0.
 \draw[arr] (data.east) to[out=0,in=0,looseness=1.25] node[right,align=left,font=\small]{state updates} (engine.east);
 \draw[arr] (engine.west) to[out=180,in=180,looseness=1.25] node[left,align=right,font=\small]{telemetry/snapshots} (api.west);
 \end{tikzpicture}
-\caption{End-to-end architecture implemented by Team Kamal.}
+\caption{End-to-end architecture implemented by Team MindMatrix.}
 \end{figure}
 
 \subsection{Operational Workflow}
 \begin{figure}[h!]
 \centering
+\resizebox{0.98\linewidth}{!}{%
 \begin{tikzpicture}[
-  n/.style={draw, rounded corners=2pt, align=center, minimum width=3.1cm, minimum height=8mm, fill=gray!8},
+  n/.style={draw, rounded corners=2pt, align=center, minimum width=2.5cm, minimum height=8mm, fill=gray!8, font=\small},
   arr/.style={-{Latex[length=2mm]}, thick}
 ]
 \node[n, fill=blue!8] (a) {Ingest / Initialize};
@@ -154,6 +156,7 @@ m_{\mathrm{fuel}}-\Delta m &\ge 0.
 \draw[arr] (d) -- (e);
 \draw[arr] (e.south) to[out=-90,in=-90,looseness=1.2] node[below,font=\small]{next simulation step} (a.south);
 \end{tikzpicture}
+}
 \caption{Autonomous simulation-control loop.}
 \end{figure}
 
@@ -165,7 +168,7 @@ m_{\mathrm{fuel}}-\Delta m &\ge 0.
 \end{itemize}
 
 \section{Conclusion}
-Team Kamal's final system couples reliable numerical propagation with scalable spatial risk screening and constrained control planning in a clean service architecture. The resulting platform is both technically rigorous and operationally usable for live mission-style demonstrations.
+Team MindMatrix's final system couples reliable numerical propagation with scalable spatial risk screening and constrained control planning in a clean service architecture. The resulting platform is both technically rigorous and operationally usable for live mission-style demonstrations.
 
 \section*{Key Symbols}
 \begin{center}

@@ -1,12 +1,29 @@
-# Team Kamal - Autonomous Constellation Manager (ACM)
+# Team MindMatrix - Autonomous Constellation Manager (ACM)
 
-National Space Hackathon 2026 submission by Team Kamal.
+National Space Hackathon 2026 submission by Team MindMatrix.
 
 This repository implements an end-to-end autonomous constellation operations stack:
 - High-frequency orbital telemetry ingestion
 - Physics-based propagation and conjunction screening
 - Autonomous maneuver scheduling under fuel and cooldown constraints
 - Real-time mission dashboard (3D globe + Mercator ground track)
+
+## 0. Problem Statement (Short)
+
+Space is increasingly crowded with active satellites and debris, making collision avoidance harder to manage manually at scale.
+
+We track satellites and space debris, predict possible collisions, and automatically plan safe movements while saving fuel.
+
+## 0.1 Judge Live Demo Flow (3-4 Minutes)
+
+Use this sequence in front of judges:
+- Show live fleet counters and debris volume.
+- Select one satellite from the list and explain object-level focus.
+- Run +1 MIN, +1 HR, AUTO, and STOP to prove simulation updates.
+- Switch between 3D globe and ground track.
+- Show proximity radar, maneuver log, and analytics panels.
+- Close with the autonomy loop:
+Get data -> Predict -> Find nearby objects -> Calculate risk -> Plan maneuver -> Apply movement -> Repeat.
 
 ## 1. Highlights
 
@@ -149,8 +166,8 @@ Open:
 ## 6. Docker Setup (Submission Requirement)
 
 ```bash
-docker build -t team-kamal-acm .
-docker run --rm -p 8000:8000 team-kamal-acm
+docker build -t team-mindmatrix-acm .
+docker run --rm -p 8000:8000 team-mindmatrix-acm
 ```
 
 Compliance:
@@ -165,6 +182,7 @@ Compliance:
 - 3D globe with trails + predicted paths
 - Mercator ground track map with declutter modes
 - Conjunction and maneuver situational panels
+- Satellite-focused operational inspection by selecting a target from fleet list
 
 ## 8. Data Sources
 
@@ -175,15 +193,15 @@ Compliance:
 
 ## 9. Submission Artifacts
 
-- Final LaTeX report source: overleaf/Team_Kamal_Final_Report.tex
+- Final LaTeX report source: overleaf/Team_MindMatrix_Final_Report.tex
 - Video speaking script: VIDEO_DEMONSTRATION_SCRIPT.md
 - Audit checklist: SUBMISSION_AUDIT.md
 
 ## 10. Known Notes
 
 - Local PDF generation is environment-dependent (no TeX engine installed in this workspace).
-- Report compiles directly in Overleaf from overleaf/Team_Kamal_Final_Report.tex.
+- Report compiles directly in Overleaf from overleaf/Team_MindMatrix_Final_Report.tex.
 
 ## 11. Team
 
-Team Kamal
+Team MindMatrix

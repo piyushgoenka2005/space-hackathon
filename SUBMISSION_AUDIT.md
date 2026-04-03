@@ -76,7 +76,7 @@ Existing docs reviewed:
 
 Added in this audit:
 - `SUBMISSION_AUDIT.md` (this file)
-- `overleaf/Team_Kamal_Final_Report.tex` (final LaTeX report for Overleaf/PDF export)
+- `overleaf/Team_MindMatrix_Final_Report.tex` (final LaTeX report for Overleaf/PDF export)
 
 ## 6) Remaining Submission Checklist
 
