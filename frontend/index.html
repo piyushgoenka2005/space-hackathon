@@ -225,10 +225,14 @@ const AUTO_START=true;
 const S={
     data:null,selectedSat:null,view:'globe',autoSim:null,
     fps:0,frameCount:0,lastFpsTime:0,
-    satMeshes:{},debrisPoints:null,gsMeshes:[],trailLine:null,predLine:null,
+    prevData:null,transitionStart:0,transitionMs:720,
+    snapshotWallMs:0,lastRefreshWallMs:0,
+    lastSimDeltaSec:2,expectedRefreshSec:0.2,
+    satMeshes:{},satTrailLines:{},satPredLines:{},debrisPoints:null,gsMeshes:[],
     mapBg:null,mapLights:null,riskPoints:null,mapEarth:null
 };
 const SAT_ANIM={yAxis:new THREE.Vector3(0,1,0),rad:new THREE.Vector3(),tang:new THREE.Vector3()};
+const PREDICT_STEP_SECONDS=30;
 
 // ═══════════════════════════════════════════════════════════════
 // 3. CONTINENT DATA (simplified outlines [lon,lat])
@@ -253,6 +257,81 @@ function fmtT(s){const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=Math.fl
 function fuelColor(pct){return pct>60?'var(--green)':pct>30?'var(--amber)':'var(--red)'}
 function fuelHex(pct){return pct>60?0x00ff88:pct>30?0xffaa00:0xff3344}
 function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+function normLon(lon){return ((lon+540)%360)-180}
+function lerpLon(a,b,t){return normLon(a+normLon(b-a)*t)}
+
+const ORBIT_PALETTE=['#00f5ff','#ff8a00','#8dff00','#ff4dc4','#ffd400','#61ffa8','#8bb0ff','#ff6b6b','#00e0a4','#f7f779'];
+function hashStr(s){let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0}
+function satTrackColor(id){return ORBIT_PALETTE[hashStr(id)%ORBIT_PALETTE.length]}
+function satTrackColorHex(id){return Number.parseInt(satTrackColor(id).slice(1),16)}
+
+function transitionAlpha(){
+    if(!S.transitionStart)return 1;
+    return clamp((performance.now()-S.transitionStart)/Math.max(1,S.transitionMs),0,1);
+}
+
+function satDisplayLla(sat){
+    const now=performance.now();
+    if(!S.snapshotWallMs||!sat)return {lat:sat?.lat||0,lon:sat?.lon||0,alt:sat?.alt||0};
+    const elapsedRealSec=Math.max(0,(now-S.snapshotWallMs)/1000);
+    const expSec=Math.max(0.06,S.expectedRefreshSec||0.2);
+    const simStep=Math.max(0.2,S.lastSimDeltaSec||2);
+    const progress=clamp(elapsedRealSec/expSec,0,1);
+    const simLeadSec=simStep*progress;
+    const path=[[sat.lat,sat.lon],...(sat.predicted||[])];
+    if(path.length<2)return {lat:sat.lat,lon:sat.lon,alt:sat.alt};
+    const seg=Math.floor(simLeadSec/PREDICT_STEP_SECONDS);
+    const t=(simLeadSec-seg*PREDICT_STEP_SECONDS)/PREDICT_STEP_SECONDS;
+    if(seg>=path.length-1){
+        const [lat,lon]=path[path.length-1];
+        return {lat,lon,alt:sat.alt};
+    }
+    const [la0,lo0]=path[Math.max(0,seg)];
+    const [la1,lo1]=path[Math.max(0,seg)+1];
+    return {lat:la0+(la1-la0)*t,lon:lerpLon(lo0,lo1,t),alt:sat.alt};
+}
+
+function blendedSatellites(data){
+    const cur=(data?.satellites)||[];
+    const prev=(S.prevData?.satellites)||[];
+    if(prev.length===0)return cur;
+    const a=transitionAlpha();
+    if(a>=0.999)return cur;
+    const prevMap=new Map(prev.map(s=>[s.id,s]));
+    return cur.map(s=>{
+        const p=prevMap.get(s.id);
+        if(!p)return s;
+        return {
+            ...s,
+            lat:p.lat+(s.lat-p.lat)*a,
+            lon:lerpLon(p.lon,s.lon,a),
+            alt:p.alt+(s.alt-p.alt)*a,
+        };
+    });
+}
+
+function drawLonLatPathWrapped(ctx, pts, w, h){
+    if(!pts||pts.length<2)return;
+    let started=false;
+    let prevLon=null;
+    for(const [lat, lonRaw] of pts){
+        const lon=((lonRaw+540)%360)-180;
+        const {x,y}=ll2m(lat,lon,w,h);
+        if(!started){
+            ctx.beginPath();
+            ctx.moveTo(x,y);
+            started=true;
+        }else if(prevLon!==null&&Math.abs(lon-prevLon)>180){
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x,y);
+        }else{
+            ctx.lineTo(x,y);
+        }
+        prevLon=lon;
+    }
+    if(started)ctx.stroke();
+}
 
 function setupCanvasHiDpi(canvas, container, headerPx){
     const w=Math.max(1,container.clientWidth);
@@ -498,11 +577,6 @@ function initGlobe(){
     selRing=new THREE.Mesh(new THREE.RingGeometry(0.018,0.022,32),new THREE.MeshBasicMaterial({color:0xffffff,side:THREE.DoubleSide,transparent:true,opacity:0.7}));
     selRing.visible=false;scene.add(selRing);
 
-    // Trail & prediction lines
-    S.trailLine=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0x00d4ff,transparent:true,opacity:0.5}));
-    S.predLine=new THREE.Line(new THREE.BufferGeometry(),new THREE.LineBasicMaterial({color:0x00d4ff,transparent:true,opacity:0.2,linewidth:1}));
-    scene.add(S.trailLine);scene.add(S.predLine);
-
     // Raycaster for selection
     const raycaster=new THREE.Raycaster();raycaster.params.Points={threshold:0.02};
     const mouse=new THREE.Vector2();
@@ -555,29 +629,80 @@ function updateGlobe(data){
     const seen=new Set();
     sats.forEach(sat=>{
         seen.add(sat.id);
-        const r=(RE_KM+sat.alt)/RE_KM*EARTH_R;
-        const pos=ll2v(sat.lat,sat.lon,r);
+        const lla=satDisplayLla(sat);
+        const r=(RE_KM+lla.alt)/RE_KM*EARTH_R;
+        const pos=ll2v(lla.lat,lla.lon,r);
         if(!S.satMeshes[sat.id]){
             const m=makeSatMesh(sat.status||'NOMINAL');
             m.userData=Object.assign(m.userData||{},{id:sat.id,status:sat.status||'NOMINAL'});
             scene.add(m);S.satMeshes[sat.id]=m;
         }
         const m=S.satMeshes[sat.id];
-        m.position.copy(pos);
-        m.userData.basePos=pos.clone();
+        m.userData.targetPos=pos.clone();
+        if(!m.userData.basePos){
+            m.position.copy(pos);
+            m.userData.basePos=pos.clone();
+        }
         if(m.userData.status!==sat.status){
             scene.remove(m);
             const nm=makeSatMesh(sat.status||'NOMINAL');
             nm.userData=Object.assign(nm.userData||{},{id:sat.id,status:sat.status||'NOMINAL'});
             nm.position.copy(pos);
+            nm.userData.targetPos=pos.clone();
             nm.userData.basePos=pos.clone();
             scene.add(nm);S.satMeshes[sat.id]=nm;
         } else {
             m.lookAt(0,0,0);
         }
     });
+
+    // Satellite trajectory lines (trail + physics-predicted path) for all satellites
+    sats.forEach(sat=>{
+        const colorHex=satTrackColorHex(sat.id);
+        const satRadius=(RE_KM+sat.alt)/RE_KM*EARTH_R;
+        const trailR=satRadius*1.001;
+        const predR=satRadius*1.003;
+        const selected=S.selectedSat===sat.id;
+        const hasSelection=!!S.selectedSat;
+
+        if(sat.trail&&sat.trail.length>1){
+            const pts=sat.trail.map(([la,lo])=>ll2v(la,lo,trailR));
+            if(!S.satTrailLines[sat.id]){
+                const mat=new THREE.LineBasicMaterial({color:colorHex,transparent:true,opacity:0.22});
+                S.satTrailLines[sat.id]=new THREE.Line(new THREE.BufferGeometry(),mat);
+                scene.add(S.satTrailLines[sat.id]);
+            }
+            const line=S.satTrailLines[sat.id];
+            line.geometry.setFromPoints(pts);
+            line.material.color.setHex(colorHex);
+            line.material.opacity=selected?0.9:(hasSelection?0.12:0.22);
+            line.visible=true;
+        }else if(S.satTrailLines[sat.id]){
+            S.satTrailLines[sat.id].visible=false;
+        }
+
+        if(sat.predicted&&sat.predicted.length>1){
+            const pts2=sat.predicted.map(([la,lo])=>ll2v(la,lo,predR));
+            if(!S.satPredLines[sat.id]){
+                const mat2=new THREE.LineDashedMaterial({color:colorHex,dashSize:0.03,gapSize:0.02,transparent:true,opacity:0.12});
+                S.satPredLines[sat.id]=new THREE.Line(new THREE.BufferGeometry(),mat2);
+                scene.add(S.satPredLines[sat.id]);
+            }
+            const pl=S.satPredLines[sat.id];
+            pl.geometry.setFromPoints(pts2);
+            pl.computeLineDistances();
+            pl.material.color.setHex(colorHex);
+            pl.material.opacity=selected?0.55:(hasSelection?0.07:0.12);
+            pl.visible=true;
+        }else if(S.satPredLines[sat.id]){
+            S.satPredLines[sat.id].visible=false;
+        }
+    });
+
     // Remove stale
     Object.keys(S.satMeshes).forEach(id=>{if(!seen.has(id)){scene.remove(S.satMeshes[id]);delete S.satMeshes[id]}});
+    Object.keys(S.satTrailLines).forEach(id=>{if(!seen.has(id)){scene.remove(S.satTrailLines[id]);delete S.satTrailLines[id]}});
+    Object.keys(S.satPredLines).forEach(id=>{if(!seen.has(id)){scene.remove(S.satPredLines[id]);delete S.satPredLines[id]}});
 
     // Debris
     const dc=data.debris_cloud||[];
@@ -637,33 +762,40 @@ function updateGlobe(data){
         });
     }
 
-    // Selection ring + trail
+    // Selection ring and detail overlay
     if(S.selectedSat){
         const sat=sats.find(s=>s.id===S.selectedSat);
         if(sat){
-            const r=(RE_KM+sat.alt)/RE_KM*EARTH_R;const p=ll2v(sat.lat,sat.lon,r);
-            selRing.position.copy(p);selRing.lookAt(0,0,0);selRing.visible=true;
-            // Trail line
-            if(sat.trail&&sat.trail.length>1){
-                const pts=sat.trail.map(([la,lo])=>ll2v(la,lo,EARTH_R*1.003));
-                S.trailLine.geometry.setFromPoints(pts);S.trailLine.visible=true;
-            }else S.trailLine.visible=false;
-            // Predicted path
-            if(sat.predicted&&sat.predicted.length>1){
-                const pts2=sat.predicted.map(([la,lo])=>ll2v(la,lo,EARTH_R*1.003));
-                S.predLine.geometry.setFromPoints(pts2);S.predLine.visible=true;
-            }else S.predLine.visible=false;
+            const sm=S.satMeshes[sat.id];
+            if(sm){
+                selRing.position.copy(sm.position);
+                selRing.lookAt(0,0,0);
+                selRing.visible=true;
+            }
             // Info overlay
             updateSatInfo(sat);
         }
     } else {
-        selRing.visible=false;S.trailLine.visible=false;S.predLine.visible=false;
+        selRing.visible=false;
         document.getElementById('sat-info').classList.remove('show');
     }
 }
 
+function updateDynamicSatTargets(){
+    if(!S.data||!S.data.satellites)return;
+    const satMap=new Map(S.data.satellites.map(s=>[s.id,s]));
+    Object.keys(S.satMeshes).forEach(id=>{
+        const sat=satMap.get(id);
+        if(!sat)return;
+        const lla=satDisplayLla(sat);
+        const r=(RE_KM+lla.alt)/RE_KM*EARTH_R;
+        S.satMeshes[id].userData.targetPos=ll2v(lla.lat,lla.lon,r);
+    });
+}
+
 function renderGlobe(){
     if(!renderer)return;
+    updateDynamicSatTargets();
     controls.update();
     if(earthGroup)earthGroup.rotation.y+=0.00025;
     if(cloudMesh)cloudMesh.rotation.y+=0.00032;
@@ -678,7 +810,7 @@ function renderGlobe(){
 }
 
 function animateSatMeshes(t){
-    const yAxis=SAT_ANIM.yAxis,rad=SAT_ANIM.rad,tang=SAT_ANIM.tang;
+    const yAxis=SAT_ANIM.yAxis,rad=SAT_ANIM.rad;
     Object.values(S.satMeshes).forEach(m=>{
         const st=m.userData.status||'NOMINAL';
         const fx=m.userData.fx||{};
@@ -686,19 +818,20 @@ function animateSatMeshes(t){
         const bobPhase=m.userData.bob||0;
         const spin=m.userData.spin||1;
         const wobble=m.userData.wobble||1;
+        const target=m.userData.targetPos;
+
+        if(target){
+            const ease=1-Math.pow(0.02,1/8);
+            m.position.lerp(target,ease);
+            m.userData.basePos=m.position.clone();
+        }
+
         const base=m.userData.basePos;
 
         if(base){
             rad.copy(base).normalize();
-            const bob=Math.sin(t*1.2+bobPhase)*0.003;
-            m.position.copy(base).addScaledVector(rad,bob);
-            if(st==='EVADING'){
-                tang.crossVectors(rad,yAxis);
-                if(tang.lengthSq()>1e-6){
-                    tang.normalize();
-                    m.position.addScaledVector(tang,Math.sin(t*6.0+bobPhase)*0.002);
-                }
-            }
+            // Keep propagation deterministic: no random positional jitter.
+            m.position.copy(base);
         }
 
         m.rotateZ(0.02*spin);
@@ -889,30 +1022,31 @@ function renderMap(data){
     });
 
     // Satellite trails & positions
-    const sats=data.satellites||[];
-    const drawAllFaint=!S.selectedSat;
-    const trailStride=drawAllFaint?Math.max(1,Math.floor(sats.length/28)):1;
+    const sats=blendedSatellites(data);
     sats.forEach((sat,idx)=>{
+        const lla=satDisplayLla(sat);
         const sc=sat.status==='NOMINAL'?'#00ff88':sat.status==='EVADING'?'#ffaa00':'#ff3344';
+        const tc=satTrackColor(sat.id);
+        const selected=S.selectedSat===sat.id;
+        const hasSelection=!!S.selectedSat;
         // Trail
         if(sat.trail&&sat.trail.length>1){
-            const selected=S.selectedSat===sat.id;
-            if(selected||idx%trailStride===0){
-                ctx.beginPath();ctx.strokeStyle=sc;ctx.globalAlpha=selected?0.56:0.08;ctx.lineWidth=selected?1.5:0.7;
-                sat.trail.forEach(([la,lo],i)=>{const{x,y}=ll2m(la,lo,w,h);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)});
-                ctx.stroke();ctx.globalAlpha=1;
-            }
+            ctx.strokeStyle=tc;ctx.globalAlpha=selected?0.9:(hasSelection?0.18:0.35);ctx.lineWidth=selected?2.0:1.0;
+            drawLonLatPathWrapped(ctx,sat.trail,w,h);
+            ctx.globalAlpha=1;
         }
         // Predicted
-        if(sat.predicted&&sat.predicted.length>1&&S.selectedSat===sat.id){
-            ctx.beginPath();ctx.strokeStyle='rgba(0,212,255,0.3)';ctx.setLineDash([4,4]);ctx.lineWidth=1;
-            sat.predicted.forEach(([la,lo],i)=>{const{x,y}=ll2m(la,lo,w,h);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y)});
-            ctx.stroke();ctx.setLineDash([]);
+        if(sat.predicted&&sat.predicted.length>1){
+            ctx.strokeStyle=tc;ctx.setLineDash([5,4]);ctx.globalAlpha=selected?0.65:(hasSelection?0.12:0.2);ctx.lineWidth=selected?1.6:0.9;
+            drawLonLatPathWrapped(ctx,sat.predicted,w,h);
+            ctx.setLineDash([]);ctx.globalAlpha=1;
         }
         // Dot
-        const{x,y}=ll2m(sat.lat,sat.lon,w,h);
+        const{x,y}=ll2m(lla.lat,lla.lon,w,h);
         ctx.fillStyle=sc;
         ctx.beginPath();ctx.arc(x,y,S.selectedSat===sat.id?4:2.5,0,Math.PI*2);ctx.fill();
+        ctx.strokeStyle=tc;ctx.lineWidth=1;ctx.globalAlpha=0.85;
+        ctx.beginPath();ctx.arc(x,y,S.selectedSat===sat.id?5.5:3.5,0,Math.PI*2);ctx.stroke();ctx.globalAlpha=1;
         if(S.selectedSat===sat.id){
             ctx.strokeStyle='#fff';ctx.lineWidth=1;
             ctx.beginPath();ctx.arc(x,y,6,0,Math.PI*2);ctx.stroke();
@@ -939,7 +1073,7 @@ function renderMap(data){
     ctx.font='10px sans-serif';ctx.fillStyle='rgba(180,230,255,0.92)';ctx.textAlign='left';
     ctx.fillText('GROUND TRACK LEGEND',lgX+8,lgY+14);
     const rows=[
-        ['#00ff88','Satellite nominal'],['#ffaa00','Satellite evading'],['#ff3344','High-risk object'],
+        ['#00ff88','Satellite nominal (marker)'],['#ffaa00','Satellite evading (marker)'],['#00f5ff','Per-satellite trajectory color'],
         ['#00d4ff','Ground station'],['rgba(255,120,40,0.75)','Risk heat cell']
     ];
     rows.forEach((r,i)=>{
@@ -1642,7 +1776,22 @@ async function simStep(seconds){
 }
 
 async function refresh(){
-    S.data=await fetchSnapshot();
+    const now=performance.now();
+    const nextData=await fetchSnapshot();
+    if(S.data&&nextData&&S.data.timestamp&&nextData.timestamp&&S.lastRefreshWallMs){
+        const simDt=(Date.parse(nextData.timestamp)-Date.parse(S.data.timestamp))/1000;
+        const wallDt=(now-S.lastRefreshWallMs)/1000;
+        if(simDt>0&&wallDt>0){
+            // Smooth timing to avoid oscillation and visual back-and-forth.
+            S.lastSimDeltaSec=S.lastSimDeltaSec*0.7+simDt*0.3;
+            S.expectedRefreshSec=S.expectedRefreshSec*0.8+wallDt*0.2;
+        }
+    }
+    S.prevData=S.data;
+    S.data=nextData;
+    S.transitionStart=performance.now();
+    S.snapshotWallMs=now;
+    S.lastRefreshWallMs=now;
     updateUI(S.data||{});
     updateGlobe(S.data||{});
     renderBullseye(S.data||{});
@@ -1657,7 +1806,7 @@ function toggleAuto(){
     const btn=document.getElementById('btn-auto');
     if(autoInterval){clearInterval(autoInterval);autoInterval=null;btn.classList.remove('btn-active');btn.innerHTML='&#9654; AUTO';return}
     btn.classList.add('btn-active');btn.innerHTML='&#9724; STOP';
-    autoInterval=setInterval(()=>simStep(60),800);
+    autoInterval=setInterval(()=>simStep(2),180);
 }
 
 // ═══════════════════════════════════════════════════════════════

@@ -35,10 +35,10 @@ from .physics.tle_loader import fetch_tle, parse_tle, tle_to_eci
 logger = logging.getLogger("acm.simulation")
 
 # Configuration
-MAX_TRAIL_POINTS = 60
-TRAIL_INTERVAL_S = 90.0
+MAX_TRAIL_POINTS = 180
+TRAIL_INTERVAL_S = 30.0
 PREDICT_DURATION_S = 5400.0
-PREDICT_STEP_S = 90.0
+PREDICT_STEP_S = 30.0
 METRICS_HISTORY_MAX = 200
 CONJUNCTION_SCREEN_INTERVAL = 900
 RISK_GRID_DEG = 10
