@@ -1,0 +1,68 @@
+National Space Hackathon 2026
+Hosted by
+Indian Institute of Technology Delhi
+Official Rulebook & Guidelines
+Updated: February 13, 2026
+National Space Hackathon 2026Rulebook
+Contents
+1 Introduction 2
+2 Eligibility 2
+3 Hackathon Structure 2
+3.1 Stage 1: Problem Statement Release and Submission . . . . . . . . . . . . . . . . 2
+3.2 Stage 2: Final Presentation and Evaluation . . . . . . . . . . . . . . . . . . . . . 2
+4 General Rules 3
+5 Prizes and Recognition 3
+6 Contact Information 3
+1
+National Space Hackathon 2026Rulebook
+1 Introduction
+The National Space Hackathon is a premier competition that brings together bright minds to
+tackle real-world challenges in space exploration. Designed to foster innovation and collaboration,
+this event provides an opportunity for students to apply their technical skills to complex problems
+inspired by human spaceflight and orbital operations.
+Participants will engage in designing, coding, and optimizing solutions with the potential for
+real-world applications in space missions.
+2 Eligibility
+•Open to all college students currently enrolled in recognized institutions across India.
+•T eam Size:Participants must form teams of at most4 members.
+•Each participant must provide a valid student ID at registration.
+•Interdisciplinary and inter-college teams are encouraged.
+•Participants must comply with all rules and deadlines.
+3 Hackathon Structure
+3.1 Stage 1: Problem Statement Release and Submission
+Round 1 Schedule
+•Start Date:March 1, 2026
+•Submission Deadline:March 29, 2026
+•The competition theme will be announced soon.
+•Teams must submit a functional and well-documented coding model.
+•Evaluation will be done based on predefined rubrics.
+•The top 10 teams will advance to the final round.
+3.2 Stage 2: Final Presentation and Evaluation
+Final Round
+•Date:April 5, 2026
+•F ormat:Online Presentation
+•The top 10 teams will present their solutions in an online round.
+• Participants will pitch their solutions to a panel of esteemed judges, including experts from
+leading space agencies and industry.
+• Additional evaluation criteria, submission format, and other deliverables will be shared along
+with the problem statement.
+2
+National Space Hackathon 2026Rulebook
+4 General Rules
+1. Each team must have at most4 members.
+2. Participants must be currently enrolled college students.
+3. Submissions must be original and developed during the hackathon duration.
+4. Any form of plagiarism will lead to immediate disqualification.
+5. Use of libraries and frameworks is permitted but must be properly credited.
+6. Late submissions will not be considered under any circumstances.
+7. Professional conduct is expected; any misconduct will result in disqualification.
+8. The Panel’s decisions are final and binding.
+5 Prizes and Recognition
+•The awards ceremony will be held in May at IIT Delhi.
+•Awards will be presented by distinguished astronauts and industry leaders.
+•Exceptional solutions may be considered for further research or industry collaboration.
+6 Contact Information
+For any queries or further details, please contact:
+Prashant Tiwari
+Email: prashantiitd24@gmail.com
+3
