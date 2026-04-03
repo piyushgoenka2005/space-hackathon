@@ -14,16 +14,6 @@ Space is increasingly crowded with active satellites and debris, making collisio
 
 We track satellites and space debris, predict possible collisions, and automatically plan safe movements while saving fuel.
 
-## 0.1 Judge Live Demo Flow (3-4 Minutes)
-
-Use this sequence in front of judges:
-- Show live fleet counters and debris volume.
-- Select one satellite from the list and explain object-level focus.
-- Run +1 MIN, +1 HR, AUTO, and STOP to prove simulation updates.
-- Switch between 3D globe and ground track.
-- Show proximity radar, maneuver log, and analytics panels.
-- Close with the autonomy loop:
-Get data -> Predict -> Find nearby objects -> Calculate risk -> Plan maneuver -> Apply movement -> Repeat.
 
 ## 1. Highlights
 
@@ -33,6 +23,24 @@ Get data -> Predict -> Find nearby objects -> Calculate risk -> Plan maneuver ->
 - Maneuver planning: evasion, recovery, station-keeping, graveyard
 - Ground-station line-of-sight aware command scheduling
 - Operator dashboard with manual and auto simulation controls
+
+## 1.1 USP: Dual-Layer Collision Mitigation
+
+Our core differentiator is not only detecting conjunctions, but selecting and executing the best mitigation mode automatically:
+
+1. Plan A - Collision-Laser Risk Reduction (non-contact)
+- When encounter geometry is favorable, the engine attempts a laser-style debris deflection strategy first.
+- This is designed to increase miss distance without spending satellite fuel.
+- The system computes feasibility and confidence before committing to this action.
+
+2. Plan B - Autonomous Evasion Burns (fuel-aware fallback)
+- If Plan A is not feasible or confidence is below threshold, the engine falls back to classical satellite evasion burns.
+- Evasion and recovery burns are planned under fuel, cooldown, and operational constraints.
+- This guarantees mission continuity when non-contact mitigation is not reliable.
+
+
+Operational loop in one line:
+Detect risk -> evaluate laser feasibility -> apply laser if confident -> otherwise execute evasion -> recover nominal orbit.
 
 ## 2. Core Mathematical Model
 

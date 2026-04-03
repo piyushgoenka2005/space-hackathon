@@ -61,6 +61,8 @@ Say exactly:
 - The radar and alert panels support conjunction interpretation.
 - In alerts, WARNING is mainly driven by close miss distance, so near passes are highlighted early.
 - Collision probability shown as Pc is the statistical risk estimate; even very small Pc means low true impact likelihood despite a close pass.
+- Our unique collision-laser logic attempts non-contact risk reduction first when geometry is favorable.
+- If laser confidence is low, the system automatically falls back to evasion burns.
 - Maneuver and analytics panels show operational impact, including delta-v and avoided-risk trends.
 
 ## 03:00 - 03:15 | Very Short Architecture Reference
@@ -93,6 +95,7 @@ Say exactly:
 - Scalable (KD-tree) ✅
 - Physically accurate (J2, RK4) ✅
 - Practical constraints (fuel, cooldown) ✅
+- Dual mitigation strategy: collision-laser first, autonomous evasion fallback ✅
 - Automation + control ✅
 
 ---

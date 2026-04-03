@@ -92,6 +92,7 @@ class SimulationEngine:
         self.metrics_history: List[Dict] = []
         self._last_metrics_time = self.current_time
         self._conj_screen_accum = 0.0
+        self._conj_screen_interval = 60.0 if DEMO_CONJUNCTION else float(CONJUNCTION_SCREEN_INTERVAL)
         self.total_fleet_dv = 0.0
         self.collisions_avoided = 0
         self.risk_field: List[Dict] = []
@@ -480,7 +481,7 @@ class SimulationEngine:
             self._schedule_keepalive_trim()
             self._last_keepalive_time = self.current_time
         self._conj_screen_accum += step_seconds
-        if self._conj_screen_accum >= CONJUNCTION_SCREEN_INTERVAL:
+        if self._conj_screen_accum >= self._conj_screen_interval:
             self._run_autonomy()
             self._conj_screen_accum = 0.0
         self.total_maneuvers_executed += man_exec
@@ -599,7 +600,8 @@ class SimulationEngine:
             if dist < CRITICAL_DISTANCE:
                 evt.selected_plan = "PLAN_B_EVASION"
                 has_los, _ = check_line_of_sight(sat.state[:3], self.current_time)
-                if not has_los:
+                # In demo mode, allow emergency autonomous evasion even if LOS is not immediate.
+                if not has_los and not DEMO_CONJUNCTION:
                     continue
                 deb = self.debris.get(did)
                 if deb is None:
@@ -613,12 +615,16 @@ class SimulationEngine:
                         bt_clean = bt_raw.replace('Z', '').split('+')[0]
                         bt = datetime.fromisoformat(bt_clean).replace(tzinfo=timezone.utc)
                         if not self._has_los_window(sat.state, self.current_time, bt):
-                            continue
+                            if DEMO_CONJUNCTION:
+                                pass
+                            else:
+                                continue
                         self.pending_burns.append({
                             "sat_id": sid, "burn_id": burn["burn_id"],
                             "burn_time": bt,
                             "dv_eci": np.array([dv["x"], dv["y"], dv["z"]]),
-                            "type": burn["type"], "mode": "GROUND-AUTHORIZED"})
+                            "type": burn["type"],
+                            "mode": "AUTO-EMERGENCY-DEMO" if DEMO_CONJUNCTION else "GROUND-AUTHORIZED"})
                     sat.status = "EVADING"
                     self.plan_b_executed += 1
                     logger.info(f"AUTO-CA: {sid} evading {did} d={dist:.3f}km")
