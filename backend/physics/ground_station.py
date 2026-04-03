@@ -3,6 +3,8 @@ Ground station network and line-of-sight (LOS) calculations.
 """
 
 import math
+import csv
+import os
 import numpy as np
 from typing import List, Tuple, Optional
 from dataclasses import dataclass
@@ -43,8 +45,8 @@ class GroundStation:
         return np.array([x_eci, y_eci, z_eci])
 
 
-# Default ground station network
-DEFAULT_STATIONS = [
+# Built-in fallback network (used only if CSV is unavailable)
+FALLBACK_STATIONS = [
     GroundStation("GS-001", "ISTRAC_Bengaluru", 13.0333, 77.5167, 820, 5.0),
     GroundStation("GS-002", "Svalbard_Sat_Station", 78.2297, 15.4077, 400, 5.0),
     GroundStation("GS-003", "Goldstone_Tracking", 35.4266, -116.8900, 1000, 10.0),
@@ -52,6 +54,37 @@ DEFAULT_STATIONS = [
     GroundStation("GS-005", "IIT_Delhi_Ground_Node", 28.5450, 77.1926, 225, 15.0),
     GroundStation("GS-006", "McMurdo_Station", -77.8463, 166.6682, 10, 5.0),
 ]
+
+
+def load_ground_stations_from_csv(csv_path: Optional[str] = None) -> List[GroundStation]:
+    """Load station definitions from dataset CSV; fall back to built-ins if missing/invalid."""
+    if csv_path is None:
+        csv_path = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..", "..", "data", "ground_stations.csv")
+        )
+
+    stations: List[GroundStation] = []
+    try:
+        with open(csv_path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                stations.append(
+                    GroundStation(
+                        station_id=row["Station_ID"].strip(),
+                        name=row["Station_Name"].strip(),
+                        lat_deg=float(row["Latitude"]),
+                        lon_deg=float(row["Longitude"]),
+                        elevation_m=float(row["Elevation_m"]),
+                        min_elevation_deg=float(row["Min_Elevation_Angle_deg"]),
+                    )
+                )
+    except Exception:
+        stations = []
+
+    return stations if stations else FALLBACK_STATIONS
+
+
+DEFAULT_STATIONS = load_ground_stations_from_csv()
 
 
 def elevation_angle(station_eci: np.ndarray, sat_eci: np.ndarray) -> float:

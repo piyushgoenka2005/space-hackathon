@@ -24,9 +24,11 @@ body{font-family:var(--font-b);background:var(--bg0);color:var(--tx1);overflow:h
 .header-controls{display:flex;gap:6px;margin-left:auto}
 .btn{padding:5px 12px;border:1px solid var(--bdr);border-radius:4px;background:var(--bg2);color:var(--tx2);font-size:11px;cursor:pointer;transition:all .2s;font-family:var(--font-b)}
 .btn:hover{border-color:var(--cyan);color:var(--cyan)}
+.btn:disabled{opacity:.55;cursor:not-allowed}
 .btn-p{border-color:var(--cyan);color:var(--cyan)}
 .btn-p:hover{background:var(--cyan);color:#000}
 .btn-active{background:var(--cyan)!important;color:#000!important;border-color:var(--cyan)!important}
+.step-status{font-size:10px;color:var(--tx3);min-width:120px;text-align:right}
 .left-panel{grid-area:left;background:var(--bg1);display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--bdr)}
 .ph{padding:8px 10px;font-family:var(--font-d);font-size:9px;letter-spacing:1.5px;color:var(--cyan);border-bottom:1px solid var(--bdr);text-transform:uppercase;display:flex;align-items:center;justify-content:space-between;gap:8px}
 .ph-exp{border:1px solid var(--bdr);background:var(--bg2);color:var(--tx2);font-size:10px;line-height:1;padding:1px 6px;border-radius:3px;cursor:pointer}
@@ -49,6 +51,7 @@ body{font-family:var(--font-b);background:var(--bg0);color:var(--tx1);overflow:h
 .vtabs{position:absolute;top:8px;left:8px;z-index:5;display:flex;gap:4px}
 .vtab{padding:4px 10px;border-radius:4px;background:rgba(13,17,23,.85);color:var(--tx2);font-size:10px;cursor:pointer;transition:all .2s;backdrop-filter:blur(8px);border:1px solid transparent}
 .vtab.active{background:var(--cyan);color:#000;border-color:var(--cyan)}
+.vtab-aux{margin-left:6px}
 .vc{width:100%;height:100%;display:none;position:relative;z-index:2}
 .vc.active{display:flex;align-items:center;justify-content:center}
 #view-globe canvas{width:100%!important;height:100%!important;display:block}
@@ -61,6 +64,8 @@ body{font-family:var(--font-b);background:var(--bg0);color:var(--tx1);overflow:h
 .bp.expanded canvas{background:#090f1d}
 #panel-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.45);backdrop-filter:blur(2px);z-index:110;display:none}
 #panel-backdrop.show{display:block}
+#app.map-expanded{grid-template-columns:1fr;grid-template-rows:var(--hdr) 1fr var(--ftr);grid-template-areas:"header" "main" "footer"}
+#app.map-expanded .left-panel,#app.map-expanded .right-panel,#app.map-expanded .bottom-area{display:none}
 .right-panel{grid-area:right;background:var(--bg1);display:flex;flex-direction:column;overflow:hidden;border-left:1px solid var(--bdr)}
 .alert-list,.man-log{flex:1;overflow-y:auto;padding:0}
 .al-item{padding:8px 12px;border-bottom:1px solid var(--bdr);font-size:11px;display:flex;flex-direction:column;gap:3px}
@@ -126,10 +131,11 @@ body{font-family:var(--font-b);background:var(--bg0);color:var(--tx1);overflow:h
         <span id="utc-time">2026-03-12 08:00:00 UTC</span>
     </div>
     <div class="header-controls">
-        <button class="btn btn-p" onclick="simStep(60)">+1 MIN</button>
-        <button class="btn btn-p" onclick="simStep(3600)">+1 HR</button>
-        <button class="btn btn-p" onclick="simStep(86400)">+1 DAY</button>
+        <button class="btn btn-p" id="btn-step-min" onclick="simStep(60)">+1 MIN</button>
+        <button class="btn btn-p" id="btn-step-hour" onclick="simStep(3600)">+1 HR</button>
+        <button class="btn btn-p" id="btn-step-day" onclick="simStep(86400)">+1 DAY</button>
         <button class="btn" id="btn-auto" onclick="toggleAuto()">&#9654; AUTO</button>
+        <span class="step-status" id="step-status"></span>
     </div>
 </header>
 <aside class="left-panel">
@@ -149,6 +155,8 @@ body{font-family:var(--font-b);background:var(--bg0);color:var(--tx1);overflow:h
     <div class="vtabs">
         <div class="vtab active" data-view="globe" onclick="switchView('globe')">3D GLOBE</div>
         <div class="vtab" data-view="map" onclick="switchView('map')">GROUND TRACK</div>
+        <div class="vtab vtab-aux" id="traj-mode-btn" onclick="cycleTrajectoryMode()">TRAJ: BALANCED</div>
+        <div class="vtab vtab-aux" id="map-expand-btn" onclick="toggleMapExpand()">EXPAND MAP</div>
     </div>
     <div class="vc active" id="view-globe"></div>
     <div class="vc" id="view-map"><canvas id="map-canvas"></canvas></div>
@@ -229,7 +237,11 @@ const S={
     snapshotWallMs:0,lastRefreshWallMs:0,
     lastSimDeltaSec:2,expectedRefreshSec:0.2,
     satMeshes:{},satTrailLines:{},satPredLines:{},debrisPoints:null,gsMeshes:[],
-    mapBg:null,mapLights:null,riskPoints:null,mapEarth:null
+    mapBg:null,mapLights:null,riskPoints:null,mapEarth:null,
+    mapExpanded:false,
+    trajMode:'balanced',
+    stepInFlight:false,
+    stepQueue:Promise.resolve()
 };
 const SAT_ANIM={yAxis:new THREE.Vector3(0,1,0),rad:new THREE.Vector3(),tang:new THREE.Vector3()};
 const PREDICT_STEP_SECONDS=30;
@@ -252,7 +264,15 @@ const INDIA=[[68,30],[72,33],[77,30],[80,22],[82,16],[80,10],[78,8],[76,9],[74,1
 // 4. UTILITY FUNCTIONS
 // ═══════════════════════════════════════════════════════════════
 function ll2v(lat,lon,r){const p=lat*DEG,t=-lon*DEG;return new THREE.Vector3(r*Math.cos(p)*Math.cos(t),r*Math.sin(p),r*Math.cos(p)*Math.sin(t))}
-function ll2m(lat,lon,w,h){return{x:(lon+180)/360*w,y:(90-lat)/180*h}}
+function ll2m(lat,lon,w,h){
+    const maxLat=85.05112878;
+    const cLat=clamp(lat,-maxLat,maxLat);
+    const latRad=cLat*DEG;
+    const x=(normLon(lon)+180)/360*w;
+    const mercN=Math.log(Math.tan(Math.PI/4+latRad/2));
+    const y=(1-mercN/Math.PI)/2*h;
+    return{x,y};
+}
 function fmtT(s){const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),ss=Math.floor(s%60);return`T+${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(ss).padStart(2,'0')}`}
 function fuelColor(pct){return pct>60?'var(--green)':pct>30?'var(--amber)':'var(--red)'}
 function fuelHex(pct){return pct>60?0x00ff88:pct>30?0xffaa00:0xff3344}
@@ -333,6 +353,50 @@ function drawLonLatPathWrapped(ctx, pts, w, h){
     if(started)ctx.stroke();
 }
 
+function shouldRenderSatTraj(sat,idx,data,isPred=false){
+    const selected=S.selectedSat===sat.id;
+    const alertSat=sat.status&&sat.status!=='NOMINAL';
+    if(S.trajMode==='full')return true;
+    if(S.trajMode==='focus')return selected||alertSat;
+    // balanced
+    if(selected||alertSat)return true;
+    if(isPred)return idx%16===0;
+    return idx%8===0;
+}
+
+function cycleTrajectoryMode(){
+    const order=['balanced','focus','full'];
+    const i=order.indexOf(S.trajMode);
+    S.trajMode=order[(i+1)%order.length];
+    const btn=document.getElementById('traj-mode-btn');
+    btn.textContent='TRAJ: '+S.trajMode.toUpperCase();
+    btn.classList.toggle('btn-active',S.trajMode!=='balanced');
+    if(S.data){
+        updateGlobe(S.data);
+        if(S.view==='map')renderMap(S.data);
+    }
+}
+
+function buildOrbitSegments(llaPts, radius, maxStepDeg=10){
+    if(!llaPts||llaPts.length<2)return null;
+    const seg=[];
+    const maxStepRad=maxStepDeg*DEG;
+    let prev=ll2v(llaPts[0][0],llaPts[0][1],radius);
+    for(let i=1;i<llaPts.length;i++){
+        const cur=ll2v(llaPts[i][0],llaPts[i][1],radius);
+        const a=prev.clone().normalize();
+        const b=cur.clone().normalize();
+        const dot=clamp(a.dot(b),-1,1);
+        const ang=Math.acos(dot);
+        // Skip visually non-physical jumps to prevent long "spiral" artifacts.
+        if(ang<=maxStepRad){
+            seg.push(prev.x,prev.y,prev.z,cur.x,cur.y,cur.z);
+        }
+        prev=cur;
+    }
+    return seg.length?new Float32Array(seg):null;
+}
+
 function setupCanvasHiDpi(canvas, container, headerPx){
     const w=Math.max(1,container.clientWidth);
     const h=Math.max(1,container.clientHeight-(headerPx||0));
@@ -387,6 +451,20 @@ function collapsePanels(){
     document.querySelectorAll('.bp.expanded').forEach(p=>p.classList.remove('expanded'));
     const bd=document.getElementById('panel-backdrop');
     if(bd)bd.classList.remove('show');
+}
+
+function toggleMapExpand(force){
+    const next=typeof force==='boolean'?force:!S.mapExpanded;
+    if(next&&S.view!=='map')switchView('map');
+    S.mapExpanded=next;
+    const app=document.getElementById('app');
+    const btn=document.getElementById('map-expand-btn');
+    app.classList.toggle('map-expanded',next);
+    btn.textContent=next?'EXIT EXPAND':'EXPAND MAP';
+    btn.classList.toggle('btn-active',next);
+    if(S.mapResize)S.mapResize();
+    S.mapBg=null;
+    if(S.view==='map')renderMap(S.data);
 }
 
 function loadTex(url, useSrgb=true){
@@ -657,7 +735,7 @@ function updateGlobe(data){
     });
 
     // Satellite trajectory lines (trail + physics-predicted path) for all satellites
-    sats.forEach(sat=>{
+    sats.forEach((sat,idx)=>{
         const colorHex=satTrackColorHex(sat.id);
         const satRadius=(RE_KM+sat.alt)/RE_KM*EARTH_R;
         const trailR=satRadius*1.001;
@@ -665,35 +743,48 @@ function updateGlobe(data){
         const selected=S.selectedSat===sat.id;
         const hasSelection=!!S.selectedSat;
 
-        if(sat.trail&&sat.trail.length>1){
-            const pts=sat.trail.map(([la,lo])=>ll2v(la,lo,trailR));
+        const showTrail=shouldRenderSatTraj(sat,idx,data,false);
+        const showPred=shouldRenderSatTraj(sat,idx,data,true);
+
+        if(showTrail&&sat.trail&&sat.trail.length>1){
+            const segPos=buildOrbitSegments(sat.trail,trailR,10);
             if(!S.satTrailLines[sat.id]){
                 const mat=new THREE.LineBasicMaterial({color:colorHex,transparent:true,opacity:0.22});
-                S.satTrailLines[sat.id]=new THREE.Line(new THREE.BufferGeometry(),mat);
+                S.satTrailLines[sat.id]=new THREE.LineSegments(new THREE.BufferGeometry(),mat);
                 scene.add(S.satTrailLines[sat.id]);
             }
             const line=S.satTrailLines[sat.id];
-            line.geometry.setFromPoints(pts);
+            if(segPos){
+                line.geometry.setAttribute('position',new THREE.BufferAttribute(segPos,3));
+                line.geometry.attributes.position.needsUpdate=true;
+                line.visible=true;
+            }else{
+                line.visible=false;
+            }
             line.material.color.setHex(colorHex);
             line.material.opacity=selected?0.9:(hasSelection?0.12:0.22);
-            line.visible=true;
         }else if(S.satTrailLines[sat.id]){
             S.satTrailLines[sat.id].visible=false;
         }
 
-        if(sat.predicted&&sat.predicted.length>1){
-            const pts2=sat.predicted.map(([la,lo])=>ll2v(la,lo,predR));
+        if(showPred&&sat.predicted&&sat.predicted.length>1){
+            const segPos2=buildOrbitSegments(sat.predicted,predR,12);
             if(!S.satPredLines[sat.id]){
                 const mat2=new THREE.LineDashedMaterial({color:colorHex,dashSize:0.03,gapSize:0.02,transparent:true,opacity:0.12});
-                S.satPredLines[sat.id]=new THREE.Line(new THREE.BufferGeometry(),mat2);
+                S.satPredLines[sat.id]=new THREE.LineSegments(new THREE.BufferGeometry(),mat2);
                 scene.add(S.satPredLines[sat.id]);
             }
             const pl=S.satPredLines[sat.id];
-            pl.geometry.setFromPoints(pts2);
-            pl.computeLineDistances();
+            if(segPos2){
+                pl.geometry.setAttribute('position',new THREE.BufferAttribute(segPos2,3));
+                pl.geometry.attributes.position.needsUpdate=true;
+                pl.computeLineDistances();
+                pl.visible=true;
+            }else{
+                pl.visible=false;
+            }
             pl.material.color.setHex(colorHex);
             pl.material.opacity=selected?0.55:(hasSelection?0.07:0.12);
-            pl.visible=true;
         }else if(S.satPredLines[sat.id]){
             S.satPredLines[sat.id].visible=false;
         }
@@ -877,7 +968,8 @@ function initMap(){
     if(!S.mapEarth){
         S.mapEarth=new Image();
         S.mapEarth.onload=()=>{S.mapBg=null;};
-        S.mapEarth.src='/assets/earth_day_2k.jpg';
+        S.mapEarth.onerror=()=>{S.mapEarth.src='/assets/earth_day_2k.jpg';};
+        S.mapEarth.src='/assets/Mercator-projection.jpg';
     }
     resize();
     new ResizeObserver(resize).observe(container);
@@ -886,13 +978,15 @@ function initMap(){
 function renderMapBg(ctx,w,h){
     const bg=document.createElement('canvas');bg.width=w;bg.height=h;
     const bx=bg.getContext('2d');
-    // Realistic world map base (equirectangular) if available
-    if(S.mapEarth&&S.mapEarth.complete&&S.mapEarth.naturalWidth>0){
+    const hasMap=!!(S.mapEarth&&S.mapEarth.complete&&S.mapEarth.naturalWidth>0);
+    if(hasMap){
+        bx.imageSmoothingEnabled=true;
+        bx.imageSmoothingQuality='high';
+        // The provided basemap is already Mercator; render it directly to full map extent.
         bx.drawImage(S.mapEarth,0,0,w,h);
-        bx.fillStyle='rgba(6,16,30,0.35)';
+        bx.fillStyle='rgba(6,16,30,0.22)';
         bx.fillRect(0,0,w,h);
     } else {
-        // Ocean base fallback
         const grd=bx.createLinearGradient(0,0,0,h);
         grd.addColorStop(0,'#071726');grd.addColorStop(0.45,'#0a2140');grd.addColorStop(1,'#071726');
         bx.fillStyle=grd;bx.fillRect(0,0,w,h);
@@ -907,21 +1001,19 @@ function renderMapBg(ctx,w,h){
     // Equator
     bx.strokeStyle='rgba(0,212,255,0.15)';bx.lineWidth=1;
     const{y:ey}=ll2m(0,0,w,h);bx.beginPath();bx.moveTo(0,ey);bx.lineTo(w,ey);bx.stroke();
-    // Fallback synthetic continents only when map image is unavailable
-    if(!(S.mapEarth&&S.mapEarth.complete&&S.mapEarth.naturalWidth>0)){
-        function fillC(coords,fill,stroke){
-            bx.beginPath();
-            coords.forEach(([lon,lat],i)=>{const{x,y}=ll2m(lat,lon,w,h);i===0?bx.moveTo(x,y):bx.lineTo(x,y)});
-            bx.closePath();
-            bx.fillStyle=fill;bx.fill();
-            bx.strokeStyle='rgba(0,212,255,0.06)';bx.lineWidth=2;bx.stroke();
-            bx.strokeStyle=stroke;bx.lineWidth=1;bx.stroke();
-        }
+    function fillC(coords,fill,stroke){
+        bx.beginPath();
+        coords.forEach(([lon,lat],i)=>{const{x,y}=ll2m(lat,lon,w,h);i===0?bx.moveTo(x,y):bx.lineTo(x,y)});
+        bx.closePath();
+        bx.fillStyle=fill;bx.fill();
+        bx.strokeStyle='rgba(0,212,255,0.06)';bx.lineWidth=2;bx.stroke();
+        bx.strokeStyle=stroke;bx.lineWidth=1;bx.stroke();
+    }
+    if(!hasMap){
         CONT.forEach(c=>fillC(c,'#183322','#2b5a3b'));
         fillC(INDIA,'#22412c','#4a8060');
-    }
-    // Subtle relief noise only for fallback renderer
-    if(!(S.mapEarth&&S.mapEarth.complete&&S.mapEarth.naturalWidth>0)){
+
+        // Subtle relief texture for legibility.
         const noise=bx.createImageData(w,h);
         for(let i=0;i<noise.data.length;i+=4){
             const v=(Math.random()*12)|0;
@@ -953,19 +1045,21 @@ function renderMapBg(ctx,w,h){
         bx.fillText(txt,x,h-6);
     });
 
-    // Major reference cities for map orientation
-    const cities=[
-        ['New York',40.7,-74.0],['London',51.5,-0.1],['Bengaluru',12.97,77.59],
-        ['Tokyo',35.7,139.7],['Sydney',-33.9,151.2],['Sao Paulo',-23.6,-46.6]
-    ];
-    bx.font='10px sans-serif';
-    cities.forEach(([name,lat,lon])=>{
-        const p=ll2m(lat,lon,w,h);
-        bx.fillStyle='rgba(0,220,255,0.85)';
-        bx.fillRect(p.x-1,p.y-1,2,2);
-        bx.fillStyle='rgba(0,212,255,0.42)';
-        bx.fillText(name,p.x+20,p.y-4);
-    });
+    if(!hasMap){
+        // Major reference cities for map orientation in fallback mode
+        const cities=[
+            ['New York',40.7,-74.0],['London',51.5,-0.1],['Bengaluru',12.97,77.59],
+            ['Tokyo',35.7,139.7],['Sydney',-33.9,151.2],['Sao Paulo',-23.6,-46.6]
+        ];
+        bx.font='10px sans-serif';
+        cities.forEach(([name,lat,lon])=>{
+            const p=ll2m(lat,lon,w,h);
+            bx.fillStyle='rgba(0,220,255,0.85)';
+            bx.fillRect(p.x-1,p.y-1,2,2);
+            bx.fillStyle='rgba(0,212,255,0.42)';
+            bx.fillText(name,p.x+20,p.y-4);
+        });
+    }
     S.mapBg=bg;
 
     // Night city lights texture
@@ -1029,14 +1123,16 @@ function renderMap(data){
         const tc=satTrackColor(sat.id);
         const selected=S.selectedSat===sat.id;
         const hasSelection=!!S.selectedSat;
+        const showTrail=shouldRenderSatTraj(sat,idx,data,false);
+        const showPred=shouldRenderSatTraj(sat,idx,data,true);
         // Trail
-        if(sat.trail&&sat.trail.length>1){
+        if(showTrail&&sat.trail&&sat.trail.length>1){
             ctx.strokeStyle=tc;ctx.globalAlpha=selected?0.9:(hasSelection?0.18:0.35);ctx.lineWidth=selected?2.0:1.0;
             drawLonLatPathWrapped(ctx,sat.trail,w,h);
             ctx.globalAlpha=1;
         }
         // Predicted
-        if(sat.predicted&&sat.predicted.length>1){
+        if(showPred&&sat.predicted&&sat.predicted.length>1){
             ctx.strokeStyle=tc;ctx.setLineDash([5,4]);ctx.globalAlpha=selected?0.65:(hasSelection?0.12:0.2);ctx.lineWidth=selected?1.6:0.9;
             drawLonLatPathWrapped(ctx,sat.predicted,w,h);
             ctx.setLineDash([]);ctx.globalAlpha=1;
@@ -1059,7 +1155,7 @@ function renderMap(data){
     // Debris (small dots)
     ctx.fillStyle='rgba(255,68,102,0.08)';
     const debris=data.debris_cloud||[];
-    const dStride=Math.max(1,Math.floor(debris.length/2500));
+    const dStride=debris.length<=10000?1:Math.max(1,Math.floor(debris.length/10000));
     for(let i=0;i<debris.length;i+=dStride){
         const [did,lat,lon,alt]=debris[i];
         const{x,y}=ll2m(lat,lon,w,h);
@@ -1081,6 +1177,8 @@ function renderMap(data){
         ctx.fillStyle=r[0];ctx.fillRect(lgX+8,y-7,9,9);
         ctx.fillStyle='rgba(220,245,255,0.82)';ctx.fillText(r[1],lgX+22,y);
     });
+    ctx.fillStyle='rgba(180,230,255,0.8)';
+    ctx.fillText(`Trajectory mode: ${S.trajMode.toUpperCase()}`,lgX+8,lgY+lgH-6);
 
     // ── TERMINATOR LINE (day/night boundary) ──
     const sun=data.sun_subsolar;
@@ -1742,6 +1840,8 @@ function switchView(v){
     document.querySelectorAll('.vtab').forEach(t=>t.classList.toggle('active',t.dataset.view===v));
     document.getElementById('view-globe').classList.toggle('active',v==='globe');
     document.getElementById('view-map').classList.toggle('active',v==='map');
+    document.getElementById('map-expand-btn').style.display=v==='map'?'':'none';
+    if(v!=='map'&&S.mapExpanded)toggleMapExpand(false);
     if(v==='map'){
         if(S.mapResize)S.mapResize();
         S.mapBg=null;
@@ -1765,14 +1865,48 @@ async function fetchSnapshot(){
     }
 }
 
-async function simStep(seconds){
+function setStepControlsBusy(busy,label=''){
+    const ids=['btn-step-min','btn-step-hour','btn-step-day'];
+    ids.forEach(id=>{const el=document.getElementById(id);if(el)el.disabled=busy;});
+    const st=document.getElementById('step-status');
+    if(st)st.textContent=label;
+}
+
+async function runStepSequence(totalSeconds,source='manual'){
+    const MAX_CHUNK_SECONDS=600;
+    const stepTotal=Math.max(1,Math.floor(Number(totalSeconds)||0));
+    let remaining=stepTotal;
+    let done=0;
+    S.stepInFlight=true;
+    setStepControlsBusy(true,source==='manual'?`Stepping ${stepTotal}s...`:'Running auto');
     try{
-        const r=await fetch('/api/simulate/step',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({step_seconds:seconds})});
-        if(!r.ok)throw new Error();
+        while(remaining>0){
+            const chunk=Math.min(MAX_CHUNK_SECONDS,remaining);
+            const r=await fetch('/api/simulate/step',{
+                method:'POST',
+                headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({step_seconds:chunk})
+            });
+            if(!r.ok)throw new Error('simulate-step failed');
+            remaining-=chunk;
+            done+=chunk;
+            if(source==='manual'&&stepTotal>MAX_CHUNK_SECONDS){
+                const pct=Math.round((done/stepTotal)*100);
+                setStepControlsBusy(true,`Stepping ${stepTotal}s... ${pct}%`);
+            }
+        }
     }catch(e){
-        // Keep UI stable when backend is unavailable
+        // Keep UI stable when backend is unavailable.
+    }finally{
+        await refresh();
+        S.stepInFlight=false;
+        setStepControlsBusy(false,'');
     }
-    await refresh();
+}
+
+function simStep(seconds,source='manual'){
+    S.stepQueue=S.stepQueue.then(()=>runStepSequence(seconds,source)).catch(()=>{});
+    return S.stepQueue;
 }
 
 async function refresh(){
@@ -1804,9 +1938,18 @@ async function refresh(){
 let autoInterval=null;
 function toggleAuto(){
     const btn=document.getElementById('btn-auto');
-    if(autoInterval){clearInterval(autoInterval);autoInterval=null;btn.classList.remove('btn-active');btn.innerHTML='&#9654; AUTO';return}
+    if(autoInterval){
+        clearInterval(autoInterval);
+        autoInterval=null;
+        btn.classList.remove('btn-active');
+        btn.innerHTML='&#9654; AUTO';
+        if(!S.stepInFlight)setStepControlsBusy(false,'');
+        return;
+    }
     btn.classList.add('btn-active');btn.innerHTML='&#9724; STOP';
-    autoInterval=setInterval(()=>simStep(2),180);
+    autoInterval=setInterval(()=>{
+        if(!S.stepInFlight)simStep(2,'auto');
+    },1200);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1836,6 +1979,8 @@ async function init(){
     renderCharts(S.data);
     renderGantt(S.data);
     renderDvChart(S.data);
+    document.getElementById('traj-mode-btn').textContent='TRAJ: '+S.trajMode.toUpperCase();
+    document.getElementById('map-expand-btn').style.display='none';
     document.getElementById('loading').classList.add('hide');
     requestAnimationFrame(animate);
     // Auto-refresh every 5s
@@ -1843,7 +1988,7 @@ async function init(){
 }
 
 window.addEventListener('load',init);
-window.addEventListener('keydown',e=>{if(e.key==='Escape')collapsePanels();});
+window.addEventListener('keydown',e=>{if(e.key==='Escape'){if(S.mapExpanded)toggleMapExpand(false);collapsePanels();}});
 </script>
 </body>
 </html>

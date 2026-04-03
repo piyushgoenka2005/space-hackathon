@@ -41,9 +41,10 @@ PREDICT_DURATION_S = 5400.0
 PREDICT_STEP_S = 30.0
 METRICS_HISTORY_MAX = 200
 CONJUNCTION_SCREEN_INTERVAL = 900
+CONJUNCTION_LOOKAHEAD_HOURS = 24.0
 RISK_GRID_DEG = 10
 RISK_FIELD_INTERVAL_S = 300
-AUTONOMY_MAX_DEBRIS = 2000
+AUTONOMY_MAX_DEBRIS = int(os.getenv("AOSE_AUTONOMY_MAX_DEBRIS", "0"))
 LASER_ENGAGE_MAX_DIST_KM = 1.5
 LASER_MIN_TCA_S = 120.0
 LASER_MAX_REL_SPEED_KMS = 18.0
@@ -63,7 +64,7 @@ TLE_DEBRIS_URL = [
     "https://celestrak.org/NORAD/elements/gp.php?GROUP=iridium-33-debris&FORMAT=tle",
 ]
 MAX_SATELLITES = 120
-MAX_DEBRIS = 5000
+MAX_DEBRIS = 12000
 OFFLINE_SEED = os.getenv("AOSE_OFFLINE_SEED", "1") == "1"
 
 
@@ -104,6 +105,8 @@ class SimulationEngine:
         self.plan_a_success = 0
         self.plan_a_fallback_to_b = 0
         self.plan_b_executed = 0
+        self._snapshot_cache: Optional[Dict] = None
+        self._snapshot_cache_time: Optional[datetime] = None
 
         self._init_from_tle_catalogs()
         self._record_metrics()
@@ -113,6 +116,10 @@ class SimulationEngine:
             f"ACM Engine initialized | {len(self.satellites)} sats | "
             f"{len(self.debris)} debris | T={self.current_time.isoformat()}"
         )
+
+    def _invalidate_snapshot_cache(self):
+        self._snapshot_cache = None
+        self._snapshot_cache_time = None
 
     def _init_from_tle_catalogs(self):
         data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))
@@ -314,6 +321,7 @@ class SimulationEngine:
                     self.satellites[oid] = SatelliteState(oid, state, state.copy())
                     self.sat_trails[oid] = deque(maxlen=MAX_TRAIL_POINTS)
             processed += 1
+        self._invalidate_snapshot_cache()
         return {"status": "ACK", "processed_count": processed,
                 "active_cdm_warnings": len(self.conjunction_assessor.active_cdms)}
 
@@ -348,6 +356,7 @@ class SimulationEngine:
                 "burn_time": bt, "dv_eci": np.array([dv["x"], dv["y"], dv["z"]]),
                 "type": burn.get("type", "MANUAL"),
             })
+        self._invalidate_snapshot_cache()
         return {"status": "SCHEDULED", "validation": {
             "ground_station_los": has_los, "sufficient_fuel": ok,
             "projected_mass_remaining_kg": round(sat.total_mass - fuel_need if ok else sat.total_mass, 2),
@@ -422,6 +431,7 @@ class SimulationEngine:
             self._run_autonomy()
             self._conj_screen_accum = 0.0
         self.total_maneuvers_executed += man_exec
+        self._invalidate_snapshot_cache()
         return {
             "status": "STEP_COMPLETE",
             "new_timestamp": self.current_time.isoformat().replace('+00:00', '') + "Z",
@@ -483,7 +493,7 @@ class SimulationEngine:
         debris_for_screen = self._sample_debris_for_autonomy()
         events = self.conjunction_assessor.screen_conjunctions(
             sat_states, debris_for_screen, self.current_time,
-            lookahead_hours=3.0, time_step=1800.0
+            lookahead_hours=CONJUNCTION_LOOKAHEAD_HOURS, time_step=1800.0
         )
         refined = []
         for evt in events:
@@ -575,6 +585,8 @@ class SimulationEngine:
                         "type": "GRAVEYARD"})
 
     def _sample_debris_for_autonomy(self) -> Dict[str, np.ndarray]:
+        if AUTONOMY_MAX_DEBRIS <= 0:
+            return self.debris
         if len(self.debris) <= AUTONOMY_MAX_DEBRIS:
             return self.debris
         keys = sorted(self.debris.keys())
@@ -745,6 +757,9 @@ class SimulationEngine:
         return pts
 
     def get_visualization_snapshot(self) -> Dict:
+        if self._snapshot_cache is not None and self._snapshot_cache_time == self.current_time:
+            return self._snapshot_cache
+
         self._ensure_risk_field()
         gmst = compute_gmst(self.current_time)
         sats = []
@@ -793,7 +808,7 @@ class SimulationEngine:
         eol = sum(1 for s in self.satellites.values() if s.status == "EOL")
         tot = len(self.satellites)
         avg_f = np.mean([s.fuel_fraction for s in self.satellites.values()])*100 if tot else 0
-        return {
+        snapshot = {
             "timestamp": self.current_time.isoformat().replace('+00:00', '')+"Z",
             "elapsed_s": round((self.current_time-self.start_time).total_seconds()),
             "satellites": sats, "debris_cloud": debris_cloud,
@@ -824,6 +839,9 @@ class SimulationEngine:
             "risk_field": self.risk_field,
             "sun_subsolar": self._sun_subsolar_point(),
         }
+        self._snapshot_cache = snapshot
+        self._snapshot_cache_time = self.current_time
+        return snapshot
 
     def _sun_subsolar_point(self) -> Dict:
         """Approximate sub-solar latitude and longitude for terminator line."""
